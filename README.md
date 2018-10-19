@@ -7,5 +7,7 @@ Basic HTML formatting is supported:
 * \<u\>
 * \<i\>
 
+Images are also supported when served over HTTP or Base64 encoded. Attached images do not work (yet).
+
 Send me a message on any platform if you wish to have the details.
 
