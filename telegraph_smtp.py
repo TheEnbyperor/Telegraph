@@ -19,7 +19,7 @@ class TelegraphHandler:
         self.mqtt = mqtt
 
     async def handle_RCPT(self, server, session, envelope, address, rcpt_options):
-        if address != 'post@~.misell.cymru':
+        if address != 'post@home.misell.cymru':
             return '553 invalid email'
         envelope.rcpt_tos.append(address)
         return '250 OK'
