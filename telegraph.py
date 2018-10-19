@@ -31,6 +31,7 @@ def on_message(client, userdata: Context, msg):
     message = payload.get("message")
     if message is None:
         return
+    sender = payload.get("from")
 
     formatted_time = time.strftime("%Y-%m-%dT%H:%M:%S")
     printer = userdata.printer
@@ -46,6 +47,13 @@ def on_message(client, userdata: Context, msg):
     printer.set(bold=False)
     printer.textln(formatted_time)
 
+    # Print sender if available
+    if sender is not None:
+        printer.set(bold=True)
+        printer.text("From: ")
+        printer.set(bold=False)
+        printer.textln(sender)
+
     # Print message
     printer.textln("")
     printer.textln(message)
@@ -53,20 +61,21 @@ def on_message(client, userdata: Context, msg):
     print(printer.output)
 
 
-printer = escpos.printer.Dummy()
-printer.hw("INIT")
+if __name__ == "__main__":
+    printer = escpos.printer.Dummy()
+    printer.hw("INIT")
 
-context = Context(printer)
+    context = Context(printer)
 
-client = mqtt.Client(userdata=context)
-client.on_connect = on_connect
-client.message_callback_add("printer/print", on_message)
+    client = mqtt.Client(userdata=context)
+    client.on_connect = on_connect
+    client.message_callback_add("printer/print", on_message)
 
-client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
+    client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
 
-while True:
-    try:
-        client.loop()
-    except (KeyboardInterrupt, SystemExit):
-        print("Bye!")
-        break
+    while True:
+        try:
+            client.loop()
+        except (KeyboardInterrupt, SystemExit):
+            print("Bye!")
+            break
