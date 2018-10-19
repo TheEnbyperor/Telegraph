@@ -1,8 +1,11 @@
 import os
 import json
+import escpos.constants
 import escpos.printer
 import time
 import paho.mqtt.client as mqtt
+import bs4
+from bs4 import BeautifulSoup
 
 
 class Context:
@@ -17,6 +20,32 @@ def on_connect(client, userdata, flags, rc):
     """
     print("Connected with result code "+str(rc))
     client.subscribe("printer/print")
+
+
+def walk_html_tree(node, printer):
+    if node.name is not None:
+        for child in node.children:
+            if isinstance(child, bs4.element.NavigableString):
+                printer.text(str(child))
+            elif child.name == "i":
+                printer._raw(escpos.constants.ESC + b'\x34\x01')
+                walk_html_tree(child, printer)
+                printer._raw(escpos.constants.ESC + b'\x34\x00')
+            elif child.name == "b":
+                printer._raw(escpos.constants.ESC + b'\x45\x01')
+                walk_html_tree(child, printer)
+                printer._raw(escpos.constants.ESC + b'\x45\x00')
+            elif child.name == "b":
+                printer._raw(escpos.constants.ESC + b'\x2d\x01')
+                walk_html_tree(child, printer)
+                printer._raw(escpos.constants.ESC + b'\x2d\x00')
+            else:
+                walk_html_tree(child, printer)
+
+
+def parse_html(printer, html):
+    soup = BeautifulSoup(html, features="html.parser")
+    walk_html_tree(soup, printer)
 
 
 def on_message(client, userdata: Context, msg):
@@ -37,33 +66,32 @@ def on_message(client, userdata: Context, msg):
     printer = userdata.printer
 
     # Print subject
-    printer.set()
-    printer.set(double_height=True)
+    printer._raw(escpos.constants.GS + b'\x21\x01')
     printer.textln(subject)
+    printer._raw(escpos.constants.GS + b'\x21\x00')
 
     # Print message time
-    printer.set(bold=True)
+    printer._raw(escpos.constants.ESC + b'\x45\x01')
     printer.text("Time: ")
-    printer.set(bold=False)
+    printer._raw(escpos.constants.ESC + b'\x45\x00')
     printer.textln(formatted_time)
 
     # Print sender if available
     if sender is not None:
-        printer.set(bold=True)
+        printer._raw(escpos.constants.ESC + b'\x45\x01')
         printer.text("From: ")
-        printer.set(bold=False)
+        printer._raw(escpos.constants.ESC + b'\x45\x00')
         printer.textln(sender)
 
     # Print message
     printer.textln("")
-    printer.textln(message)
+    parse_html(printer, message)
     printer.cut()
-    print(printer.output)
 
 
 if __name__ == "__main__":
-    printer = escpos.printer.Dummy()
-    printer.hw("INIT")
+    printer = escpos.printer.Usb(0x0416, 0x5011)
+    printer._raw(escpos.constants.ESC + b'\x40')
 
     context = Context(printer)
 

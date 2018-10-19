@@ -1,3 +1,4 @@
 python-escpos==3.0a4
 paho-mqtt
 aiosmtpd
+bs4
