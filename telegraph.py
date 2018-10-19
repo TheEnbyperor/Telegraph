@@ -99,6 +99,24 @@ def walk_html_tree(node, printer):
                 printer._raw(escpos.constants.ESC + b'\x2d\x01')
                 walk_html_tree(child, printer)
                 printer._raw(escpos.constants.ESC + b'\x2d\x00')
+            elif child.name == "h1":
+                printer._raw(escpos.constants.ESC + b'\x21\x12')
+                printer._raw(escpos.constants.ESC + b'\x45\x01')
+                walk_html_tree(child, printer)
+                printer._raw(escpos.constants.ESC + b'\x21\x00')
+                printer._raw(escpos.constants.ESC + b'\x45\x00')
+            elif child.name == "h2":
+                printer._raw(escpos.constants.ESC + b'\x21\x11')
+                printer._raw(escpos.constants.ESC + b'\x45\x01')
+                walk_html_tree(child, printer)
+                printer._raw(escpos.constants.ESC + b'\x21\x00')
+                printer._raw(escpos.constants.ESC + b'\x45\x00')
+            elif child.name == "h3":
+                printer._raw(escpos.constants.ESC + b'\x21\x01')
+                printer._raw(escpos.constants.ESC + b'\x45\x01')
+                walk_html_tree(child, printer)
+                printer._raw(escpos.constants.ESC + b'\x21\x00')
+                printer._raw(escpos.constants.ESC + b'\x45\x00')
             elif child.name == "img":
                 img = get_image(child['src'])
                 if img is None:

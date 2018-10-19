@@ -6,6 +6,9 @@ Basic HTML formatting is supported:
 * \<b\>
 * \<u\>
 * \<i\>
+* \<h1\>
+* \<h2\>
+* \<h3\>
 
 Images are also supported when served over HTTP or Base64 encoded. Attached images do not work (yet).
 
