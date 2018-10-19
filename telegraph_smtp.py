@@ -3,6 +3,7 @@ import os
 import email.parser
 import email.policy
 import paho.mqtt.client as mqtt
+from bs4 import BeautifulSoup
 from aiosmtpd.controller import Controller
 
 
@@ -32,11 +33,17 @@ class TelegraphHandler:
         print('End of message', flush=True)
 
         message = email.parser.BytesParser(policy=email.policy.default).parsebytes(envelope.content)
+        message_body = message.get_body()
+        message_content = message_body.get_content()
+
+        if message_body.get_content_type() == "text/html":
+            soup = BeautifulSoup(message_content)
+            message_content = soup.get_text()
 
         data = json.dumps({
             "subject": message["subject"],
             "from": message["from"],
-            "message": message.get_body().get_content()
+            "message": message_content
         })
         self.mqtt.publish("printer/print", data)
 
