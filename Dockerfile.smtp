@@ -1,0 +1,8 @@
+FROM python:3-slim
+
+COPY requirements.txt /src/
+RUN python3 -m pip install -r /src/requirements.txt
+
+COPY telegraph_smtp.py /src/
+WORKDIR /src/
+CMD ["python3", "/src/telegraph_smtp.py"]

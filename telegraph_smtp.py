@@ -11,7 +11,7 @@ def on_connect(client, userdata, flags, rc):
     Handles subscribing to topics when a connection to MQTT is established
     :return: None
     """
-    print("Connected with result code "+str(rc))
+    print("Connected with result code "+str(rc), flush=True)
 
 
 class TelegraphHandler:
@@ -29,7 +29,7 @@ class TelegraphHandler:
         print('Message for %s' % envelope.rcpt_tos)
         print('Message data:\n')
         print(envelope.content.decode('utf8', errors='replace'))
-        print('End of message')
+        print('End of message', flush=True)
 
         message = email.parser.BytesParser(policy=email.policy.default).parsebytes(envelope.content)
 
@@ -49,13 +49,13 @@ if __name__ == "__main__":
 
     client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
 
-    controller = Controller(TelegraphHandler(client), hostname='127.0.0.1', port=10025)
+    controller = Controller(TelegraphHandler(client), hostname='0.0.0.0', port=25)
     controller.start()
-    print("SMTP server started")
+    print("SMTP server started", flush=True)
     while True:
         try:
             client.loop()
         except (KeyboardInterrupt, SystemExit):
-            print("Bye!")
+            print("Bye!", flush=True)
             break
     controller.stop()
