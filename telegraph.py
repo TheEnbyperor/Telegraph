@@ -32,9 +32,9 @@ def convert_image(img):
     img_original = img.convert('RGBA')
     im = Image.new("RGB", img_original.size, (255, 255, 255))
     im.paste(img_original, mask=img_original.split()[3])
-    wpercent = (380 / float(im.size[0]))
+    wpercent = (384 / float(im.size[0]))
     hsize = int((float(im.size[1]) * float(wpercent)))
-    im = im.resize((380, hsize), Image.ANTIALIAS)
+    im = im.resize((384, hsize), Image.ANTIALIAS)
     im = im.convert("L")
     im = ImageOps.invert(im)
     im = im.convert("1")
@@ -141,7 +141,7 @@ def on_message(client, userdata: Context, msg):
 
     subject = payload.get("subject")
     if subject is None:
-        return
+        subject =  "None"i
     message = payload.get("message")
     if message is None:
         return
