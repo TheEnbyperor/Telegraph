@@ -1,10 +1,15 @@
 import os
+import io
 import json
+import base64
 import escpos.constants
 import escpos.printer
 import time
 import paho.mqtt.client as mqtt
 import bs4
+import w3lib.url
+import requests
+from PIL import Image, ImageOps
 from bs4 import BeautifulSoup
 
 
@@ -20,6 +25,27 @@ def on_connect(client, userdata, flags, rc):
     """
     print("Connected with result code "+str(rc))
     client.subscribe("printer/print")
+
+
+def get_image(url):
+    try:
+        data_uri = w3lib.url.parse_data_uri(url)
+        try:
+            im = Image.open(io.BytesIO(base64.b64decode(data_uri.data)))
+            return im
+        except IOError:
+            return None
+    except ValueError:
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+        except requests.exceptions.RequestException:
+            return None
+        try:
+            im = Image.open(io.BytesIO(response.content))
+            return im
+        except IOError:
+            return None
 
 
 def walk_html_tree(node, printer):
@@ -39,6 +65,12 @@ def walk_html_tree(node, printer):
                 printer._raw(escpos.constants.ESC + b'\x2d\x01')
                 walk_html_tree(child, printer)
                 printer._raw(escpos.constants.ESC + b'\x2d\x00')
+            elif child.name == "img":
+                img = get_image(child['src'])
+                if img is None:
+                    printer.text(str(child['alt']))
+                else:
+                    pass
             else:
                 walk_html_tree(child, printer)
 
@@ -90,7 +122,8 @@ def on_message(client, userdata: Context, msg):
 
 
 if __name__ == "__main__":
-    printer = escpos.printer.Usb(0x0416, 0x5011)
+    # printer = escpos.printer.Usb(0x0416, 0x5011)
+    printer = escpos.printer.Dummy()
     printer._raw(escpos.constants.ESC + b'\x40')
 
     context = Context(printer)
