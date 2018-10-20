@@ -1,7 +1,8 @@
 import os
 import io
 import json
-import base64
+import regex
+import typing
 import escpos.constants
 import escpos.printer
 import time
@@ -10,8 +11,9 @@ import bs4
 import struct
 import w3lib.url
 import requests
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageDraw, ImageFont
 from bs4 import BeautifulSoup
+from emoji import UNICODE_EMOJI
 
 
 class Context:
@@ -28,7 +30,16 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe("printer/print")
 
 
-def convert_image(img):
+def is_emoji(s: str) -> bool:
+    count = 0
+    for emoji in UNICODE_EMOJI:
+        count += s.count(emoji)
+        if count > 1:
+            return False
+    return bool(count)
+
+
+def convert_image(img: Image) -> Image:
     img_original = img.convert('RGBA')
     im = Image.new("RGB", img_original.size, (255, 255, 255))
     im.paste(img_original, mask=img_original.split()[3])
@@ -41,7 +52,7 @@ def convert_image(img):
     return im
 
 
-def get_image(url):
+def get_image(url: str) -> typing.Union[None, Image.Image]:
     try:
         data_uri = w3lib.url.parse_data_uri(url)
         try:
@@ -64,7 +75,7 @@ def get_image(url):
             return None
 
 
-def print_image(im, printer):
+def print_image(im: Image.Image, printer: escpos.escpos.Escpos):
     header = escpos.constants.ESC + b"*\x21" + struct.pack("<H", im.width)
     outp = [escpos.constants.ESC + b"3\x16"]  # Adjust line-feed size
     im = im.transpose(Image.ROTATE_270).transpose(Image.FLIP_LEFT_RIGHT)
@@ -82,11 +93,37 @@ def print_image(im, printer):
     printer._raw(b''.join(outp))
 
 
-def walk_html_tree(node, printer):
+def print_emoji(text: str, printer: escpos.escpos.Escpos):
+    im = Image.new('RGB', (24, 24), 'white')
+    draw = ImageDraw.Draw(im)
+    font = ImageFont.truetype('NotoEmoji-Regular.ttf', 15)
+    draw.text((0, 0), text, (0, 0, 0), font=font)
+    im = im.convert("L")
+    im = ImageOps.invert(im)
+    im = im.convert("1")
+    header = escpos.constants.ESC + b"*\x21" + struct.pack("<H", im.width)
+    im = im.transpose(Image.ROTATE_270).transpose(Image.FLIP_LEFT_RIGHT)
+    outp = [escpos.constants.ESC + b"3\x16"]  # Adjust line-feed size
+    im_bytes = im.tobytes()
+    outp.append(header + im_bytes)
+    outp.append(escpos.constants.ESC + b"2")  # Reset line-feed size
+    printer._raw(b''.join(outp))
+
+
+def print_text(text: str, printer: escpos.escpos.Escpos):
+    text = regex.findall(r'.\p{Sk}+|\X', text)
+    for char in text:
+        if len(char) > 1 or ord(char) > 127:
+            print_emoji(char, printer)
+        else:
+            printer.text(char)
+
+
+def walk_html_tree(node: bs4.element.Tag, printer: escpos.escpos.Escpos):
     if node.name is not None:
         for child in node.children:
             if isinstance(child, bs4.element.NavigableString):
-                printer.text(str(child))
+                print_text(str(child), printer)
             elif child.name == "i":
                 printer._raw(escpos.constants.ESC + b'\x34\x01')
                 walk_html_tree(child, printer)
@@ -120,7 +157,7 @@ def walk_html_tree(node, printer):
             elif child.name == "img":
                 img = get_image(child['src'])
                 if img is None:
-                    printer.text(str(child['alt']))
+                    print_text(str(child['alt']), printer)
                 else:
                     img = convert_image(img)
                     print_image(img, printer)
@@ -128,12 +165,12 @@ def walk_html_tree(node, printer):
                 walk_html_tree(child, printer)
 
 
-def parse_html(printer, html):
+def parse_html(printer: escpos.escpos.Escpos, html: str):
     soup = BeautifulSoup(html, features="html.parser")
     walk_html_tree(soup, printer)
 
 
-def on_message(client, userdata: Context, msg):
+def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     try:
         payload = json.loads(msg.payload)
     except json.decoder.JSONDecodeError:
@@ -141,7 +178,7 @@ def on_message(client, userdata: Context, msg):
 
     subject = payload.get("subject")
     if subject is None:
-        subject =  "None"i
+        subject =  "None"
     message = payload.get("message")
     if message is None:
         return

@@ -3,3 +3,5 @@ paho-mqtt
 aiosmtpd
 bs4
 w3lib
+emoji
+regex
