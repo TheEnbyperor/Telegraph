@@ -5,3 +5,6 @@ bs4
 w3lib
 emoji
 regex
+lxml
+tinycss
+cssselect

@@ -7,12 +7,11 @@ import escpos.constants
 import escpos.printer
 import time
 import paho.mqtt.client as mqtt
-import bs4
 import struct
 import w3lib.url
 import requests
 from PIL import Image, ImageOps, ImageDraw, ImageFont
-from bs4 import BeautifulSoup
+from lxml import etree
 from emoji import UNICODE_EMOJI
 
 
@@ -119,60 +118,60 @@ def print_text(text: str, printer: escpos.escpos.Escpos):
             printer.text(char)
 
 
-def walk_html_tree(node: bs4.element.Tag, printer: escpos.escpos.Escpos):
-    if node.name is not None:
-        for child in node.children:
-            if isinstance(child, bs4.element.NavigableString):
-                print_text(str(child), printer)
-            elif child.name == "br":
-                print_text('\n', printer)
-            elif child.name == "i" or child.name == "em" or child.name == "cite":
-                printer._raw(escpos.constants.ESC + b'\x34\x01')
-                walk_html_tree(child, printer)
-                printer._raw(escpos.constants.ESC + b'\x34\x00')
-            elif child.name == "b":
-                printer._raw(escpos.constants.ESC + b'\x45\x01')
-                walk_html_tree(child, printer)
-                printer._raw(escpos.constants.ESC + b'\x45\x00')
-            elif child.name == "u":
-                printer._raw(escpos.constants.ESC + b'\x2d\x01')
-                walk_html_tree(child, printer)
-                printer._raw(escpos.constants.ESC + b'\x2d\x00')
-            elif child.name == "h1":
-                printer._raw(escpos.constants.ESC + b'\x21\x12')
-                printer._raw(escpos.constants.ESC + b'\x45\x01')
-                walk_html_tree(child, printer)
-                print_text('\n', printer)
-                printer._raw(escpos.constants.ESC + b'\x21\x00')
-                printer._raw(escpos.constants.ESC + b'\x45\x00')
-            elif child.name == "h2":
-                printer._raw(escpos.constants.ESC + b'\x21\x11')
-                printer._raw(escpos.constants.ESC + b'\x45\x01')
-                walk_html_tree(child, printer)
-                print_text('\n', printer)
-                printer._raw(escpos.constants.ESC + b'\x21\x00')
-                printer._raw(escpos.constants.ESC + b'\x45\x00')
-            elif child.name == "h3":
-                printer._raw(escpos.constants.ESC + b'\x21\x01')
-                printer._raw(escpos.constants.ESC + b'\x45\x01')
-                walk_html_tree(child, printer)
-                print_text('\n', printer)
-                printer._raw(escpos.constants.ESC + b'\x21\x00')
-                printer._raw(escpos.constants.ESC + b'\x45\x00')
-            elif child.name == "img":
-                img = get_image(child['src'])
-                if img is None:
-                    print_text(str(child['alt']), printer)
-                else:
-                    img = convert_image(img)
-                    print_image(img, printer)
+def walk_html_tree(node: etree.Element, printer: escpos.escpos.Escpos):
+    print(node.tag, node.attrib, node.text, node.tail)
+    print_text(str(node.text), printer)
+    for child in node:
+        if child.tag == "br":
+            print_text('\n', printer)
+        elif child.tag == "i" or child.tag == "em" or child.tag == "cite":
+            printer._raw(escpos.constants.ESC + b'\x34\x01')
+            walk_html_tree(child, printer)
+            printer._raw(escpos.constants.ESC + b'\x34\x00')
+        elif child.tag == "b":
+            printer._raw(escpos.constants.ESC + b'\x45\x01')
+            walk_html_tree(child, printer)
+            printer._raw(escpos.constants.ESC + b'\x45\x00')
+        elif child.tag == "u":
+            printer._raw(escpos.constants.ESC + b'\x2d\x01')
+            walk_html_tree(child, printer)
+            printer._raw(escpos.constants.ESC + b'\x2d\x00')
+        elif child.tag == "h1":
+            printer._raw(escpos.constants.ESC + b'\x21\x12')
+            printer._raw(escpos.constants.ESC + b'\x45\x01')
+            walk_html_tree(child, printer)
+            print_text('\n', printer)
+            printer._raw(escpos.constants.ESC + b'\x21\x00')
+            printer._raw(escpos.constants.ESC + b'\x45\x00')
+        elif child.tag == "h2":
+            printer._raw(escpos.constants.ESC + b'\x21\x11')
+            printer._raw(escpos.constants.ESC + b'\x45\x01')
+            walk_html_tree(child, printer)
+            print_text('\n', printer)
+            printer._raw(escpos.constants.ESC + b'\x21\x00')
+            printer._raw(escpos.constants.ESC + b'\x45\x00')
+        elif child.tag == "h3":
+            printer._raw(escpos.constants.ESC + b'\x21\x01')
+            printer._raw(escpos.constants.ESC + b'\x45\x01')
+            walk_html_tree(child, printer)
+            print_text('\n', printer)
+            printer._raw(escpos.constants.ESC + b'\x21\x00')
+            printer._raw(escpos.constants.ESC + b'\x45\x00')
+        elif child.tag == "img":
+            img = get_image(child.get('src'))
+            if img is None:
+                print_text(str(child.get('alt')), printer)
             else:
-                walk_html_tree(child, printer)
+                img = convert_image(img)
+                print_image(img, printer)
+        else:
+            walk_html_tree(child, printer)
+    print_text(str(node.tail), printer)
 
 
 def parse_html(printer: escpos.escpos.Escpos, html: str):
-    soup = BeautifulSoup(html, features="html.parser")
-    walk_html_tree(soup, printer)
+    tree = etree.HTML(html)
+    walk_html_tree(tree, printer)
 
 
 def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
@@ -218,7 +217,6 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
 
 if __name__ == "__main__":
     printer = escpos.printer.Usb(0x0416, 0x5011)
-    # printer = escpos.printer.Dummy()
     printer._raw(escpos.constants.ESC + b'\x40')
 
     context = Context(printer)
