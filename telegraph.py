@@ -96,7 +96,7 @@ def print_image(im: Image.Image, printer: escpos.escpos.Escpos):
 def print_emoji(text: str, printer: escpos.escpos.Escpos):
     im = Image.new('RGB', (24, 24), 'white')
     draw = ImageDraw.Draw(im)
-    font = ImageFont.truetype('NotoEmoji-Regular.ttf', 15)
+    font = ImageFont.truetype('NotoEmoji-Regular.ttf', 18)
     draw.text((0, 0), text, (0, 0, 0), font=font)
     im = im.convert("L")
     im = ImageOps.invert(im)
