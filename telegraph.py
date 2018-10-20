@@ -124,7 +124,9 @@ def walk_html_tree(node: bs4.element.Tag, printer: escpos.escpos.Escpos):
         for child in node.children:
             if isinstance(child, bs4.element.NavigableString):
                 print_text(str(child), printer)
-            elif child.name == "i":
+            elif child.name == "br":
+                print_text('\n', printer)
+            elif child.name == "i" or child.name == "em" or child.name == "cite":
                 printer._raw(escpos.constants.ESC + b'\x34\x01')
                 walk_html_tree(child, printer)
                 printer._raw(escpos.constants.ESC + b'\x34\x00')
@@ -132,7 +134,7 @@ def walk_html_tree(node: bs4.element.Tag, printer: escpos.escpos.Escpos):
                 printer._raw(escpos.constants.ESC + b'\x45\x01')
                 walk_html_tree(child, printer)
                 printer._raw(escpos.constants.ESC + b'\x45\x00')
-            elif child.name == "b":
+            elif child.name == "u":
                 printer._raw(escpos.constants.ESC + b'\x2d\x01')
                 walk_html_tree(child, printer)
                 printer._raw(escpos.constants.ESC + b'\x2d\x00')
@@ -140,18 +142,21 @@ def walk_html_tree(node: bs4.element.Tag, printer: escpos.escpos.Escpos):
                 printer._raw(escpos.constants.ESC + b'\x21\x12')
                 printer._raw(escpos.constants.ESC + b'\x45\x01')
                 walk_html_tree(child, printer)
+                print_text('\n', printer)
                 printer._raw(escpos.constants.ESC + b'\x21\x00')
                 printer._raw(escpos.constants.ESC + b'\x45\x00')
             elif child.name == "h2":
                 printer._raw(escpos.constants.ESC + b'\x21\x11')
                 printer._raw(escpos.constants.ESC + b'\x45\x01')
                 walk_html_tree(child, printer)
+                print_text('\n', printer)
                 printer._raw(escpos.constants.ESC + b'\x21\x00')
                 printer._raw(escpos.constants.ESC + b'\x45\x00')
             elif child.name == "h3":
                 printer._raw(escpos.constants.ESC + b'\x21\x01')
                 printer._raw(escpos.constants.ESC + b'\x45\x01')
                 walk_html_tree(child, printer)
+                print_text('\n', printer)
                 printer._raw(escpos.constants.ESC + b'\x21\x00')
                 printer._raw(escpos.constants.ESC + b'\x45\x00')
             elif child.name == "img":
