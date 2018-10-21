@@ -4,6 +4,17 @@ import tinycss.token_data
 import html_parser
 
 
+class EdgeSizes:
+    def __init__(self, left: float, right: float, top: float, bottom: float):
+        self.left = left
+        self.right = right
+        self.top = top
+        self.bottom = bottom
+
+    def __repr__(self):
+        return f"EdgeSizes({self.left}, {self.right}, {self.top}, {self.bottom})"
+
+
 class Rect:
     def __init__(self, x: float, y: float, width: float, height: float):
         self.x = x
@@ -11,13 +22,14 @@ class Rect:
         self.width = width
         self.height = height
 
+    def __repr__(self):
+        return f"Rect({self.x}, {self.y}, {self.height}, {self.width})"
 
-class EdgeSizes:
-    def __init__(self, left: float, right: float, top: float, bottom: float):
-        self.left = left
-        self.right = right
-        self.top = top
-        self.bottom = bottom
+    def expanded_by(self, edge: EdgeSizes):
+        return Rect(self.x - edge.left,
+                    self.y - edge.left,
+                    self.width + edge.left + edge.right,
+                    self.height + edge.top + edge.bottom)
 
 
 class Dimensions:
@@ -27,10 +39,24 @@ class Dimensions:
         self.border = border
         self.padding = padding
 
+    def __repr__(self):
+        return f"Dimensions({self.content}, {self.margin}, {self.border}, {self.padding})"
+
     @classmethod
     def default(cls):
         return cls(Rect(0, 0, 0, 0), EdgeSizes(0, 0, 0, 0), EdgeSizes(0, 0, 0, 0), EdgeSizes(0, 0, 0, 0))
 
+    @property
+    def padding_box(self) -> Rect:
+        return self.content.expanded_by(self.padding)
+
+    @property
+    def border_box(self) -> Rect:
+        return self.padding_box.expanded_by(self.border)
+
+    @property
+    def margin_box(self) -> Rect:
+        return self.border_box.expanded_by(self.margin)
 
 @enum.unique
 class BoxType(enum.Enum):
@@ -47,27 +73,31 @@ class LayoutBox:
         self.node = node
 
     def __repr__(self, level=0):
-        ret = "\t" * level + f"<LayoutBox {self.dimensions} {type(self.node)} {self.box_type} ["
+        ret = "\t" * level + f"<LayoutBox {self.dimensions} {self.node.node} {self.box_type} ["
         for child in self.children:
             ret += "\n" + child.__repr__(level + 1)
         ret += ("\n" + ("\t" * level) if len(self.children) >= 1 else "") + "]"
         return ret
 
-    def get_inline_container(self):
+    def get_inline_container(self, parser):
         if self.box_type in [BoxType.INLINE, BoxType.ANONYMOUS]:
             return self
         else:
             if len(self.children) < 1 or self.children[-1].box_type != BoxType.ANONYMOUS:
-                    self.children.append(LayoutBox(BoxType.ANONYMOUS))
+                    self.children.append(
+                        LayoutBox(BoxType.ANONYMOUS,
+                                  html_parser.StyledNode(None, parser.cascade_rules([], self.node.style_rules), [])
+                                  )
+                    )
             return self.children[-1]
 
-    def layout(self, containing_block: Dimensions):
-        if self.box_type == BoxType.BLOCK:
-            self.layout_block(containing_block)
+    def layout(self, containing_block: Dimensions, prev_dimensions: Dimensions):
+        if self.box_type in [BoxType.BLOCK, BoxType.ANONYMOUS]:
+            self.layout_block(containing_block, prev_dimensions)
 
-    def layout_block(self, containing_block: Dimensions):
+    def layout_block(self, containing_block: Dimensions, prev_dimensions: Dimensions):
         self.calculate_block_width(containing_block)
-        self.calculate_block_position(containing_block)
+        self.calculate_block_position(containing_block, prev_dimensions)
         self.layout_block_children()
         self.calculate_block_height()
 
@@ -142,8 +172,35 @@ class LayoutBox:
         self.dimensions.margin.left = margin_left
         self.dimensions.margin.right = margin_right
 
+    def calculate_block_position(self, containing_block: Dimensions, prev_dimensions: Dimensions):
+        if prev_dimensions is not None:
+            self.dimensions.margin.top = max(self.get_single_int_value("margin-top"), prev_dimensions.margin.bottom)
+        else:
+            self.dimensions.margin.top = self.get_single_int_value("margin-top")
+        self.dimensions.margin.bottom = self.get_single_int_value("margin-bottom")
+        self.dimensions.padding.top = self.get_single_int_value("padding-top")
+        self.dimensions.padding.bottom = self.get_single_int_value("padding-bottom")
 
-def build_layout_box(style_node) -> typing.Union[None, LayoutBox]:
+        self.dimensions.content.x = containing_block.content.x + self.dimensions.margin.left \
+                                    + self.dimensions.border.left + self.dimensions.padding.left
+        self.dimensions.content.y = containing_block.content.height + containing_block.content.y \
+                                    + self.dimensions.margin.top + self.dimensions.border.top \
+                                    + self.dimensions.padding.top
+
+    def layout_block_children(self):
+        prev_dimensions = None
+        for child in self.children:
+            child.layout(self.dimensions, prev_dimensions)
+            prev_dimensions = child.dimensions
+            self.dimensions.content.height += child.dimensions.margin_box.height
+
+    def calculate_block_height(self):
+        height = self.get_single_int_value("height")
+        if height != "auto":
+            self.dimensions.content.height = height
+
+
+def build_layout_box(style_node, parser) -> typing.Union[None, LayoutBox]:
     root_layout = style_node.display()
     if root_layout == html_parser.Display.INLINE:
         root_layout = BoxType.INLINE
@@ -154,18 +211,16 @@ def build_layout_box(style_node) -> typing.Union[None, LayoutBox]:
     root = LayoutBox(root_layout, style_node)
 
     has_block_children = any(c.display() == html_parser.Display.BLOCK for c in style_node.children)
-    print(root, has_block_children)
     for child in style_node.children:
         display = child.display()
-        print(display)
         if display == html_parser.Display.BLOCK:
-            root.children.append(build_layout_box(child))
+            root.children.append(build_layout_box(child, parser))
         elif display == html_parser.Display.INLINE:
             container = root
             if has_block_children:
-                if container.box_type == BoxType.INLINE:
-                    container.box_type = BoxType.BLOCK
-                container = root.get_inline_container()
-            container.children.append(build_layout_box(child))
+                # if container.box_type == BoxType.INLINE:
+                #     container.box_type = BoxType.BLOCK
+                container = root.get_inline_container(parser)
+            container.children.append(build_layout_box(child, parser))
 
     return root

@@ -3,6 +3,7 @@ import typing
 import tinycss
 import cssselect
 import enum
+import re
 import html5_parser
 import layout_builder
 from lxml import etree
@@ -37,7 +38,7 @@ p {
 
 body {
   display: block;
-  margin: 8px 2px;
+  margin: 8px;
 }
 
 b {
@@ -110,13 +111,13 @@ class Display(enum.Enum):
 
 
 class StyledNode:
-    def __init__(self, node: etree.Element, style_rules: CSS_RULE_MAPPING, children: typing.List):
+    def __init__(self, node: etree.Element, style_rules: CSS_DEFINITIONS, children: typing.List):
         self.node = node
         self.style_rules = style_rules
         self.children = children
 
     def __getitem__(self, item):
-        return self.style_rules.get(item)
+        return next(r.value for r in self.style_rules if r.name == item)
 
     def __repr__(self, level=0):
         ret = "\t" * level + f"<StyledNode {self.node} {self.style_rules} ["
@@ -142,6 +143,8 @@ class StyledNode:
 
 
 class Parser:
+    WHITE_SPACE_RE = re.compile("[^\x20\x09\x0c\x0d\x0a\u200b]+")
+
     def __init__(self, html):
         self.html = html
         self.css_parser = tinycss.make_parser('page3')
@@ -262,11 +265,15 @@ class Parser:
                     continue
             if CSS_PROPERTIES.get(definition.name) is not None and CSS_PROPERTIES[definition.name].inherited:
                 out[definition.name] = definition
+        elm_out = {}
         for definition in elm_definitions:
             if out.get(definition.name) is not None:
                 if out[definition.name].priority == "important" and definition.priority != "important":
                     continue
-            out[definition.name] = definition
+            elm_out[definition.name] = definition
+        elm_out = self.expand_rules(elm_out)
+        for k, v in elm_out.items():
+            out[k] = v
 
         for definition, value in out.items():
             if value.value.as_css() == "inherit":
@@ -281,14 +288,12 @@ class Parser:
                 out[definition] = tinycss.css21.Declaration(definition,
                                                             CSS_PROPERTIES[definition].initial_value, None, 0, 0)
 
-        out = self.expand_rules(out)
         return [v for _, v in out.items()]
 
     def make_text_node(self, text: str, prev_rules: CSS_DEFINITIONS):
         own_rules = self.cascade_rules([], prev_rules)
-        rule_definitions = {v.name: v.value for v in own_rules}
 
-        return StyledNode(text, rule_definitions, [])
+        return StyledNode(self.WHITE_SPACE_RE.findall( text), own_rules, [])
 
     def make_styled_tree(self, node: etree.Element, tree: etree.Element, prev_rules: CSS_DEFINITIONS):
         element_rules = []
@@ -304,7 +309,6 @@ class Parser:
         own_rules.extend(element_rules)
 
         own_rules = self.cascade_rules(own_rules, prev_rules)
-        rule_definitions = {v.name: v.value for v in own_rules}
 
         children = []
         if node.text is not None:
@@ -315,18 +319,18 @@ class Parser:
             if node.text is not None:
                 children.append(self.make_text_node(node.text, own_rules))
 
-        return StyledNode(node, rule_definitions, children)
+        return StyledNode(node, own_rules, children)
 
     def parse_html(self):
         tree = html5_parser.parse(self.html)
         self.get_css_rules(tree)
 
         styled_tree = self.make_styled_tree(tree, tree, [])
-        print(styled_tree)
 
-        layout_tree = layout_builder.build_layout_box(styled_tree)
-        print(layout_tree)
+        layout_tree = layout_builder.build_layout_box(styled_tree, self)
 
         viewport = layout_builder.Dimensions.default()
         viewport.content.width = 384
-        layout_tree.layout(viewport)
+        layout_tree.layout(viewport, None)
+
+        print(layout_tree)
