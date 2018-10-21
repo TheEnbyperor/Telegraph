@@ -8,3 +8,4 @@ regex
 lxml
 tinycss
 cssselect
+html5-parser
