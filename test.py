@@ -3,7 +3,12 @@ import html_parser
 if __name__ == "__main__":
     html = """
     aaa
-    <div data-bla="test" class="test a"><b style="color: blue;">Test <i>aaaaa</i></b></div>
+    <div data-bla="test" class="test a">
+        <b style="color: blue;">
+            Test
+            <p>aaaaa</p>
+        </b>
+    </div>
     aa
     <style>
       div[data-bla="test"] {

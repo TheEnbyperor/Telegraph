@@ -27,7 +27,11 @@ html,
 main,
 nav,
 section,
-summary {
+summary{
+  display: block;
+}
+
+p {
   display: block;
 }
 
@@ -280,6 +284,12 @@ class Parser:
         out = self.expand_rules(out)
         return [v for _, v in out.items()]
 
+    def make_text_node(self, text: str, prev_rules: CSS_DEFINITIONS):
+        own_rules = self.cascade_rules([], prev_rules)
+        rule_definitions = {v.name: v.value for v in own_rules}
+
+        return StyledNode(text, rule_definitions, [])
+
     def make_styled_tree(self, node: etree.Element, tree: etree.Element, prev_rules: CSS_DEFINITIONS):
         element_rules = []
         if node.attrib.get("style") is not None:
@@ -297,8 +307,13 @@ class Parser:
         rule_definitions = {v.name: v.value for v in own_rules}
 
         children = []
+        if node.text is not None:
+            children.append(self.make_text_node(node.text, own_rules))
+
         for child in node:
             children.append(self.make_styled_tree(child, tree, own_rules))
+            if node.text is not None:
+                children.append(self.make_text_node(node.text, own_rules))
 
         return StyledNode(node, rule_definitions, children)
 
@@ -311,3 +326,7 @@ class Parser:
 
         layout_tree = layout_builder.build_layout_box(styled_tree)
         print(layout_tree)
+
+        viewport = layout_builder.Dimensions.default()
+        viewport.content.width = 384
+        layout_tree.layout(viewport)
