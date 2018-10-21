@@ -2,12 +2,14 @@ import functools
 import typing
 import tinycss
 import cssselect
+import enum
 import html5_parser
+import layout_builder
 from lxml import etree
 from tinycss import token_data
 
 BASE_CSS = b"""
-head {
+head, style, script {
   display: none;
 }
 
@@ -42,6 +44,7 @@ b {
 CSS_VALUE = tinycss.css21.TokenList
 CSS_DEFINITIONS = typing.List[tinycss.css21.Declaration]
 CSS_DEFINITION_MAPPING = typing.Mapping[str, tinycss.css21.Declaration]
+CSS_RULE_MAPPING = typing.Mapping[str, tinycss.css21.TokenList]
 CSS_RULES = typing.List[typing.Union[cssselect.Selector, CSS_DEFINITIONS]]
 
 
@@ -95,11 +98,21 @@ CSS_PROPERTIES = {
 }
 
 
+@enum.unique
+class Display(enum.Enum):
+    NONE = enum.auto()
+    INLINE = enum.auto()
+    BLOCK = enum.auto()
+
+
 class StyledNode:
-    def __init__(self, node: etree.Element, style_rules: CSS_DEFINITION_MAPPING, children: typing.List):
+    def __init__(self, node: etree.Element, style_rules: CSS_RULE_MAPPING, children: typing.List):
         self.node = node
         self.style_rules = style_rules
         self.children = children
+
+    def __getitem__(self, item):
+        return self.style_rules.get(item)
 
     def __repr__(self, level=0):
         ret = "\t" * level + f"<StyledNode {self.node} {self.style_rules} ["
@@ -107,6 +120,21 @@ class StyledNode:
             ret += "\n" + child.__repr__(level + 1)
         ret += ("\n" + ("\t" * level) if len(self.children) >= 1 else "") + "]"
         return ret
+
+    def display(self) -> Display:
+        display = self["display"]
+        if display is None:
+            return Display.INLINE
+        if len(display) != 1:
+            return Display.INLINE
+        display = display[0]
+        if display.type != "IDENT":
+            return Display.INLINE
+        if display.value == "block":
+            return Display.BLOCK
+        elif display.value == "none":
+            return Display.NONE
+        return Display.INLINE
 
 
 class Parser:
@@ -280,3 +308,6 @@ class Parser:
 
         styled_tree = self.make_styled_tree(tree, tree, [])
         print(styled_tree)
+
+        layout_tree = layout_builder.build_layout_box(styled_tree)
+        print(layout_tree)
