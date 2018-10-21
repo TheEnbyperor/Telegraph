@@ -94,12 +94,20 @@ class LayoutBox:
     def layout(self, containing_block: Dimensions, prev_dimensions: Dimensions):
         if self.box_type in [BoxType.BLOCK, BoxType.ANONYMOUS]:
             self.layout_block(containing_block, prev_dimensions)
+        elif self.box_type == BoxType.INLINE:
+            self.layout_inline(containing_block)
 
     def layout_block(self, containing_block: Dimensions, prev_dimensions: Dimensions):
         self.calculate_block_width(containing_block)
         self.calculate_block_position(containing_block, prev_dimensions)
         self.layout_block_children()
         self.calculate_block_height()
+
+    def layout_inline(self, containing_block: Dimensions):
+        pass
+        # self.calculate_inline_position(containing_block)
+        # self.layout_block_children()
+        # self.calculate_block_height()
 
     @staticmethod
     def value_token_to_int(value: tinycss.token_data.Token):
@@ -187,6 +195,18 @@ class LayoutBox:
                                     + self.dimensions.margin.top + self.dimensions.border.top \
                                     + self.dimensions.padding.top
 
+    def calculate_inline_position(self, containing_block: Dimensions, prev_dimensions: Dimensions):
+        self.dimensions.margin.top = self.get_single_int_value("margin-top")
+        self.dimensions.margin.bottom = self.get_single_int_value("margin-bottom")
+        self.dimensions.padding.top = self.get_single_int_value("padding-top")
+        self.dimensions.padding.bottom = self.get_single_int_value("padding-bottom")
+
+        self.dimensions.content.x = containing_block.content.x + self.dimensions.margin.left \
+                                    + self.dimensions.border.left + self.dimensions.padding.left
+        self.dimensions.content.y = containing_block.content.height + containing_block.content.y \
+                                    + self.dimensions.margin.top + self.dimensions.border.top \
+                                    + self.dimensions.padding.top
+
     def layout_block_children(self):
         prev_dimensions = None
         for child in self.children:
@@ -218,8 +238,6 @@ def build_layout_box(style_node, parser) -> typing.Union[None, LayoutBox]:
         elif display == html_parser.Display.INLINE:
             container = root
             if has_block_children:
-                # if container.box_type == BoxType.INLINE:
-                #     container.box_type = BoxType.BLOCK
                 container = root.get_inline_container(parser)
             container.children.append(build_layout_box(child, parser))
 

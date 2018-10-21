@@ -3,7 +3,7 @@ import html_parser
 if __name__ == "__main__":
     html = """
     <p>
-      Hello!
+      <em>Hello!</em>
       How are you?
     </p>
     """

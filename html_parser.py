@@ -293,7 +293,7 @@ class Parser:
     def make_text_node(self, text: str, prev_rules: CSS_DEFINITIONS):
         own_rules = self.cascade_rules([], prev_rules)
 
-        return StyledNode(self.WHITE_SPACE_RE.findall( text), own_rules, [])
+        return StyledNode(self.WHITE_SPACE_RE.findall(text), own_rules, [])
 
     def make_styled_tree(self, node: etree.Element, tree: etree.Element, prev_rules: CSS_DEFINITIONS):
         element_rules = []
@@ -312,12 +312,16 @@ class Parser:
 
         children = []
         if node.text is not None:
-            children.append(self.make_text_node(node.text, own_rules))
+            text_node = self.make_text_node(node.text, own_rules)
+            if len(text_node.node) >= 1:
+                children.append(text_node)
 
         for child in node:
             children.append(self.make_styled_tree(child, tree, own_rules))
-            if node.text is not None:
-                children.append(self.make_text_node(node.text, own_rules))
+            if child.tail is not None:
+                text_node = self.make_text_node(child.tail, own_rules)
+                if len(text_node.node) >= 1:
+                    children.append(text_node)
 
         return StyledNode(node, own_rules, children)
 
