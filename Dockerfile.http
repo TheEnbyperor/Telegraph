@@ -1,0 +1,9 @@
+FROM python:3-slim
+
+COPY requirements_http.txt /src/
+RUN python3 -m pip install -r /src/requirements_http.txt
+
+COPY telegraph_webhook.py /src/
+WORKDIR /src/
+EXPOSE 80
+CMD ["python3", "/src/telegraph_webhook.py"]

@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http
+  namespace: telegraph
+  labels:
+    app: http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http
+  template:
+    metadata:
+      labels:
+        app: http
+    spec:
+      containers:
+      - name: http
+        image: evilben/telegraph_webhook:(hash)
+        env:
+        - name: MQTT_SERVER
+          value: mosquitto.mqtt
+        ports:
+        - containerPort: 80
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: http
+  namespace: telegraph
+  labels:
+    app: http
+spec:
+  selector:
+    app: http
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  externalIPs: ["172.30.2.4"]
+

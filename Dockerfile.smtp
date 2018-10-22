@@ -1,7 +1,7 @@
 FROM python:3-slim
 
-COPY requirements.txt /src/
-RUN python3 -m pip install -r /src/requirements.txt
+COPY requirements_stmp.txt /src/
+RUN python3 -m pip install -r /src/requirements_stmp.txt
 
 COPY telegraph_smtp.py /src/
 WORKDIR /src/
