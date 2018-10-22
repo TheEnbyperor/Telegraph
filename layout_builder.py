@@ -2,6 +2,7 @@ import enum
 import typing
 import tinycss.token_data
 import html_parser
+from PIL import ImageFont
 
 
 class EdgeSizes:
@@ -63,14 +64,18 @@ class BoxType(enum.Enum):
     INLINE = enum.auto()
     BLOCK = enum.auto()
     ANONYMOUS = enum.auto()
+    LINE = enum.auto()
 
 
 class LayoutBox:
-    def __init__(self, box_type: BoxType, node=None):
+    def __init__(self, box_type: BoxType, parent, node, parser):
         self.dimensions = Dimensions.default()
         self.box_type = box_type
         self.children = []
+        self.parent = parent
         self.node = node
+        self.parser = parser
+        self.font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12, encoding="unic")
 
     def __repr__(self, level=0):
         ret = "\t" * level + f"<LayoutBox {self.dimensions} {self.node.node} {self.box_type} ["
@@ -79,15 +84,18 @@ class LayoutBox:
         ret += ("\n" + ("\t" * level) if len(self.children) >= 1 else "") + "]"
         return ret
 
-    def get_inline_container(self, parser):
+    def get_inline_container(self):
         if self.box_type in [BoxType.INLINE, BoxType.ANONYMOUS]:
             return self
         else:
             if len(self.children) < 1 or self.children[-1].box_type != BoxType.ANONYMOUS:
                     self.children.append(
                         LayoutBox(BoxType.ANONYMOUS,
-                                  html_parser.StyledNode(None, parser.cascade_rules([], self.node.style_rules), [])
-                                  )
+                                  self,
+                                  html_parser.StyledNode(None,
+                                                         self.parser.cascade_rules([], self.node.style_rules),
+                                                         []),
+                                  self.parser)
                     )
             return self.children[-1]
 
@@ -104,8 +112,9 @@ class LayoutBox:
         self.calculate_block_height()
 
     def layout_inline(self, containing_block: Dimensions):
-        pass
-        # self.calculate_inline_position(containing_block)
+        self.layout_inline_children()
+        self.calculate_inline_size(containing_block)
+        self.calculate_inline_position(containing_block)
         # self.layout_block_children()
         # self.calculate_block_height()
 
@@ -180,6 +189,10 @@ class LayoutBox:
         self.dimensions.margin.left = margin_left
         self.dimensions.margin.right = margin_right
 
+    def calculate_inline_size(self, containing_block: Dimensions):
+        if isinstance(self.node.node, list):
+            self.dimensions.content.width, self.dimensions.content.height = self.font.getsize(" ".join(self.node.node))
+
     def calculate_block_position(self, containing_block: Dimensions, prev_dimensions: Dimensions):
         if prev_dimensions is not None:
             self.dimensions.margin.top = max(self.get_single_int_value("margin-top"), prev_dimensions.margin.bottom)
@@ -195,17 +208,39 @@ class LayoutBox:
                                     + self.dimensions.margin.top + self.dimensions.border.top \
                                     + self.dimensions.padding.top
 
-    def calculate_inline_position(self, containing_block: Dimensions, prev_dimensions: Dimensions):
-        self.dimensions.margin.top = self.get_single_int_value("margin-top")
-        self.dimensions.margin.bottom = self.get_single_int_value("margin-bottom")
-        self.dimensions.padding.top = self.get_single_int_value("padding-top")
-        self.dimensions.padding.bottom = self.get_single_int_value("padding-bottom")
+    def find_or_create_line_box(self):
+        parent = self.parent
+        child = self
+        while parent is not None:
+            for c in parent.children:
+                if c.box_type == BoxType.LINE:
+                    c.children.append(child)
+                    index = parent.children.index(child)
+                    del parent.children[index]
+                    child.parent = c
+                    return c
+            if parent.box_type in [BoxType.BLOCK, BoxType.ANONYMOUS]:
+                box = LayoutBox(BoxType.LINE,
+                                parent,
+                                html_parser.StyledNode(None, child.parser.cascade_rules([], child.node.style_rules), []),
+                                child.parser)
+                box.children = [child]
+                child.parent = box
+                index = parent.children.index(child)
+                parent.children[index] = box
+                return box
+            elif parent.box_type == BoxType.LINE:
+                parent.children.append(child)
+                index = child.parent.children.index(child)
+                del child.parent.children[index]
+                child.parent = parent
+                return parent
+            child = parent
+            parent = parent.parent
 
-        self.dimensions.content.x = containing_block.content.x + self.dimensions.margin.left \
-                                    + self.dimensions.border.left + self.dimensions.padding.left
-        self.dimensions.content.y = containing_block.content.height + containing_block.content.y \
-                                    + self.dimensions.margin.top + self.dimensions.border.top \
-                                    + self.dimensions.padding.top
+    def calculate_inline_position(self, containing_block: Dimensions):
+        box = self.find_or_create_line_box()
+        print(box)
 
     def layout_block_children(self):
         prev_dimensions = None
@@ -214,13 +249,20 @@ class LayoutBox:
             prev_dimensions = child.dimensions
             self.dimensions.content.height += child.dimensions.margin_box.height
 
+    def layout_inline_children(self):
+        for child in self.children:
+            child.layout(self.dimensions, None)
+            if child.dimensions.margin_box.height > self.dimensions.content.height:
+                self.dimensions.content.height = child.dimensions.margin_box.height
+            self.dimensions.content.width += child.dimensions.margin_box.width
+
     def calculate_block_height(self):
         height = self.get_single_int_value("height")
         if height != "auto":
             self.dimensions.content.height = height
 
 
-def build_layout_box(style_node, parser) -> typing.Union[None, LayoutBox]:
+def build_layout_box(style_node, parser, parent=None) -> typing.Union[None, LayoutBox]:
     root_layout = style_node.display()
     if root_layout == html_parser.Display.INLINE:
         root_layout = BoxType.INLINE
@@ -228,17 +270,17 @@ def build_layout_box(style_node, parser) -> typing.Union[None, LayoutBox]:
         root_layout = BoxType.BLOCK
     elif root_layout == html_parser.Display.NONE:
         return None
-    root = LayoutBox(root_layout, style_node)
+    root = LayoutBox(root_layout, parent, style_node, parser)
 
     has_block_children = any(c.display() == html_parser.Display.BLOCK for c in style_node.children)
     for child in style_node.children:
         display = child.display()
         if display == html_parser.Display.BLOCK:
-            root.children.append(build_layout_box(child, parser))
+            root.children.append(build_layout_box(child, parser, root))
         elif display == html_parser.Display.INLINE:
             container = root
             if has_block_children:
-                container = root.get_inline_container(parser)
-            container.children.append(build_layout_box(child, parser))
+                container = root.get_inline_container()
+            container.children.append(build_layout_box(child, parser, root))
 
     return root
