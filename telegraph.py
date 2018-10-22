@@ -1,7 +1,6 @@
 import os
 import io
 import json
-import typing
 import escpos.constants
 import escpos.printer
 import time
@@ -19,6 +18,7 @@ PAGE_STYLE = """
 }
 body {
   margin: 0;
+  font-size: 20px;
 }
 """
 
@@ -120,6 +120,8 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     formatted_time = time.strftime("%Y-%m-%dT%H:%M:%S")
     printer = userdata.printer
 
+    printer._raw(escpos.constants.ESC + b'\x40')
+
     # Print subject
     printer._raw(escpos.constants.GS + b'\x21\x01')
     printer.textln(subject)
@@ -145,9 +147,8 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
 
 
 if __name__ == "__main__":
-    # printer = escpos.printer.Usb(0x0416, 0x5011)
-    printer = escpos.printer.Dummy()
-    printer._raw(escpos.constants.ESC + b'\x40')
+    printer = escpos.printer.Usb(0x0416, 0x5011)
+    # printer = escpos.printer.Dummy()
 
     context = Context(printer)
 
