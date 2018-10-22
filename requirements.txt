@@ -9,3 +9,6 @@ lxml
 tinycss
 cssselect
 html5-parser
+Pillow
+cairocffi
+weasyprint
