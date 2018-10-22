@@ -1,6 +1,6 @@
 import os
 import paho.mqtt.client as mqtt
-from flask import Flask, g, abort
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -15,11 +15,8 @@ def on_connect(client, userdata, flags, rc):
 
 @app.route('/print-shopping-list', methods=['GET'])
 def shopping_list_hook():
-    client = g.get("client", None)
-    if client is not None:
-        client.publish("printer/shopping-list")
-        return "OK"
-    abort(500)
+    client.publish("printer/shopping-list")
+    return "OK"
 
 
 if __name__ == '__main__':
@@ -28,8 +25,5 @@ if __name__ == '__main__':
 
     client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
     client.loop_start()
-
-    with app.app_context():
-        g.client = client
 
     app.run(host="0.0.0.0", port=80)
