@@ -8,6 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import selenium.webdriver.firefox.firefox_binary
 import selenium.common.exceptions
 import paho.mqtt.client as mqtt
+from pyvirtualdisplay import Display
 
 binary = selenium.webdriver.firefox.firefox_binary.FirefoxBinary('/home/benjamin/firefox/firefox')
 fp = webdriver.FirefoxProfile('/home/benjamin/.mozilla/firefox/volp2y1k.dev-edition-default/')
@@ -43,9 +44,9 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe("printer/shopping-list")
 
 
-def get_shopping_list():
-    driver = webdriver.Firefox(fp, firefox_binary=binary)
+def get_shopping_list(driver):
     driver.get("https://shoppinglist.google.com/lists/default")
+    print("Got page", flush=True)
 
     list_items = []
 
@@ -53,21 +54,21 @@ def get_shopping_list():
         shopping_list = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "shoppingList"))
         )
+        print("Got list", flush=True)
         shopping_list = shopping_list.find_element_by_class_name("activeItems")
         shopping_list = shopping_list.find_elements_by_class_name("activeItem")
         for item in shopping_list:
             list_items.append(item.find_element_by_class_name("title").text)
     finally:
-        driver.quit()
-
-    return template.render(items=list_items)
+        return template.render(items=list_items)
 
 
 def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
     print("Printing shopping list", flush=True)
     try:
-        shopping_list = get_shopping_list()
-    except selenium.common.exceptions.WebDriverException:
+        shopping_list = get_shopping_list(userdata)
+    except selenium.common.exceptions.WebDriverException as e:
+        print(e)
         return
 
     data = json.dumps({
@@ -79,7 +80,13 @@ def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
 
 
 if __name__ == "__main__":
-    client = mqtt.Client()
+    display = Display(visible=0, size=(800, 600))
+    display.start()
+    print("Setup display", flush=True)
+    driver = webdriver.Firefox(fp, firefox_binary=binary)
+    print("Got driver", flush=True)
+
+    client = mqtt.Client(userdata=driver)
     client.on_connect = on_connect
     client.message_callback_add("printer/shopping-list", on_message)
 
@@ -91,3 +98,6 @@ if __name__ == "__main__":
         except (KeyboardInterrupt, SystemExit):
             print("Bye!")
             break
+
+    driver.close()
+    display.stop()

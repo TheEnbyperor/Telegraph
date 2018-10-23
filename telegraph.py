@@ -8,6 +8,7 @@ import math
 import paho.mqtt.client as mqtt
 import struct
 import cairocffi as cairo
+import jinja2
 from PIL import Image, ImageOps
 from weasyprint import HTML, CSS
 
@@ -21,6 +22,33 @@ body {
   font-size: 20px;
 }
 """
+TEMPLATE = jinja2.Template("""
+<html>
+    <head>
+        <title>Telegraph</title>
+
+        <style>
+            body {
+                font-family: sans-serif;
+            }
+            
+            p {
+                font-size: 23px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>{{ subject }}</h1>
+        <p>
+            <b>Time:</b> {{ time }}
+            {% if sender %}
+                <br/>
+                <b>From:</b> {{ sender }}
+            {% endif %}
+        </p>
+    </body>
+</html>
+""")
 
 
 class Context:
@@ -120,35 +148,18 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     formatted_time = time.strftime("%Y-%m-%dT%H:%M:%S")
     printer = userdata.printer
 
-    printer._raw(escpos.constants.ESC + b'\x40')
-
-    # Print subject
-    printer._raw(escpos.constants.GS + b'\x21\x01')
-    printer.textln(subject)
-    printer._raw(escpos.constants.GS + b'\x21\x00')
-
-    # Print message time
-    printer._raw(escpos.constants.ESC + b'\x45\x01')
-    printer.text("Time: ")
-    printer._raw(escpos.constants.ESC + b'\x45\x00')
-    printer.textln(formatted_time)
-
-    # Print sender if available
-    if sender is not None:
-        printer._raw(escpos.constants.ESC + b'\x45\x01')
-        printer.text("From: ")
-        printer._raw(escpos.constants.ESC + b'\x45\x00')
-        printer.textln(sender)
+    # Print header
+    parse_html(printer, TEMPLATE.render(subject=subject, time=formatted_time, sender=sender))
 
     # Print message
-    printer.textln("")
     parse_html(printer, message)
-    printer.cut()
+    printer._raw(b"\n"*6)
 
 
 if __name__ == "__main__":
     printer = escpos.printer.Usb(0x0416, 0x5011)
     # printer = escpos.printer.Dummy()
+    printer._raw(escpos.constants.ESC + b"@")
 
     context = Context(printer)
 

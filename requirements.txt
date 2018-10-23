@@ -5,3 +5,4 @@ Pillow
 cairocffi
 weasyprint
 flask
+PyVirtualDisplay
