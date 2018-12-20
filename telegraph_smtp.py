@@ -1,4 +1,5 @@
 import json
+import base64
 import os
 import email.parser
 import email.policy
@@ -35,10 +36,27 @@ class TelegraphHandler:
         message_body = message.get_body(preferencelist=('html', 'plain'))
         message_content = message_body.get_content()
 
+        attachments = {}
+        for part in message.walk():
+            content_id = part.get("Content-ID")
+            if content_id is None:
+                continue
+            content_id = content_id.strip()
+            if not content_id.startswith("<"):
+                continue
+            if not content_id.endswith(">"):
+                continue
+
+            attachments[content_id[1:-1]] = {
+                "type": part.get_content_type(),
+                "data": base64.b64encode(part.get_content()).decode()
+            }
+
         data = json.dumps({
             "subject": message["subject"],
             "from": message["from"],
-            "message": message_content
+            "message": message_content,
+            "attachments": attachments
         })
         self.mqtt.publish("printer/print", data)
 
