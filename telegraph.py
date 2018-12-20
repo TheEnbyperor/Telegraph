@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import base64
 import escpos.constants
 import escpos.printer
 import time
@@ -10,7 +11,7 @@ import struct
 import cairocffi as cairo
 import jinja2
 from PIL import Image, ImageOps
-from weasyprint import HTML, CSS
+from weasyprint import HTML, CSS, default_url_fetcher
 
 PAGE_STYLE = """
 @page {
@@ -123,8 +124,19 @@ def print_image(im: Image.Image, printer: escpos.escpos.Escpos):
     printer._raw(b''.join(outp))
 
 
-def parse_html(printer: escpos.escpos.Escpos, html: str):
-    doc = HTML(string=html).render(stylesheets=[CSS(string=PAGE_STYLE)], enable_hinting=True)
+def attachment_fetcher_factory(attachments):
+    def attachment_fetcher(url)
+        if url.startswith('cid:'):
+            cid = url[4:]
+            attachment = attachments[cid]
+            return dict(string=base64.b64decode(attachment["data"], mime_type=attachment["type"])
+        else:
+          return weasyprint.default_url_fetcher(url)
+    return attachment_fetcher
+
+
+def parse_html(printer: escpos.escpos.Escpos, html: str, attachments: dict):
+    doc = HTML(string=html, url_fetcher=attachment_fetcher_factory(attachments)).render(stylesheets=[CSS(string=PAGE_STYLE, url_fetcher=attachment_fetcher_factory(attachments))], enable_hinting=True)
     write_image_surface(doc, printer)
 
 
@@ -141,6 +153,9 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     message = payload.get("message")
     if message is None:
         return
+    attachments = payload.get("attachments")
+    if attachments is None:
+        attachments = {}
     sender = payload.get("from")
 
     formatted_time = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -149,10 +164,10 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     print(f"New email from {sender}, subject: {subject}", flush=True)
 
     # Print header
-    parse_html(printer, TEMPLATE.render(subject=subject, time=formatted_time, sender=sender))
+    parse_html(printer, TEMPLATE.render(subject=subject, time=formatted_time, sender=sender), {})
 
     # Print message
-    parse_html(printer, message)
+    parse_html(printer, message, attachments)
     printer._raw(b"\n"*6)
 
 
