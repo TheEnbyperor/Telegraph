@@ -15,6 +15,7 @@ from weasyprint import HTML, CSS
 PAGE_STYLE = """
 @page {
   width: 384px;
+  height: 384px;
   margin: 0;
 }
 body {
@@ -31,19 +32,18 @@ TEMPLATE = jinja2.Template("""
             body {
                 font-family: sans-serif;
             }
-            
             p {
                 font-size: 23px;
             }
         </style>
     </head>
     <body>
-        <h1>{{ subject }}</h1>
+        <h1>{{ subject|e }}</h1>
         <p>
-            <b>Time:</b> {{ time }}
+            <b>Time:</b> {{ time|e }}
             {% if sender %}
                 <br/>
-                <b>From:</b> {{ sender }}
+                <b>From:</b> {{ sender|e }}
             {% endif %}
         </p>
     </body>
@@ -61,11 +61,11 @@ def on_connect(client, userdata, flags, rc):
     Handles subscribing to topics when a connection to MQTT is established
     :return: None
     """
-    print("Connected with result code "+str(rc))
+    print("Connected with result code "+str(rc), flush=True)
     client.subscribe("printer/print")
 
 
-def write_image_surface(doc, resolution=96):
+def write_image_surface(doc, printer, resolution=96):
     dppx = resolution / 96
 
     # This duplicates the hinting logic in Page.paint. There is a
@@ -77,16 +77,21 @@ def write_image_surface(doc, resolution=96):
     heights = [int(math.ceil(p._page_box.children[0].height * dppx)) for p in doc.pages]
 
     max_width = max(widths)
-    sum_heights = sum(heights)
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, max_width, sum_heights)
-    context = cairo.Context(surface)
-    pos_y = 0
+    printer._raw(escpos.constants.ESC + b"3\x16")
     for page, width, height in zip(doc.pages, widths, heights):
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, max_width, height)
+        context = cairo.Context(surface)
         pos_x = (max_width - width) / 2
-        page.paint(context, pos_x, pos_y, scale=dppx, clip=True)
-        pos_y += height
-    return surface, max_width, sum_heights
+        page.paint(context, pos_x, 0, scale=dppx, clip=True)
+        target = io.BytesIO()
+        surface.write_to_png(target)
+        target.seek(0)
+        im = Image.open(target)
+        im.load()
+        im = convert_image(im)
+        print_image(im, printer)
 
+    printer._raw(escpos.constants.ESC + b"2")
 
 def convert_image(img: Image) -> Image:
     img_original = img.convert('RGBA')
@@ -102,8 +107,8 @@ def convert_image(img: Image) -> Image:
 
 
 def print_image(im: Image.Image, printer: escpos.escpos.Escpos):
+    outp = []
     header = escpos.constants.ESC + b"*\x21" + struct.pack("<H", im.width)
-    outp = [escpos.constants.ESC + b"3\x16"]  # Adjust line-feed size
     im = im.transpose(Image.ROTATE_270).transpose(Image.FLIP_LEFT_RIGHT)
     line_height = 24
     width_pixels, height_pixels = im.size
@@ -115,26 +120,19 @@ def print_image(im: Image.Image, printer: escpos.escpos.Escpos):
         im_bytes = im_slice.tobytes()
         outp.append(header + im_bytes + b"\n")
         left += line_height
-    outp.append(escpos.constants.ESC + b"2")  # Reset line-feed size
     printer._raw(b''.join(outp))
 
 
 def parse_html(printer: escpos.escpos.Escpos, html: str):
     doc = HTML(string=html).render(stylesheets=[CSS(string=PAGE_STYLE)], enable_hinting=True)
-    surface, _, _ = write_image_surface(doc)
-    target = io.BytesIO()
-    surface.write_to_png(target)
-    target.seek(0)
-    im = Image.open(target)
-    im.load()
-    im = convert_image(im)
-    print_image(im, printer)
+    write_image_surface(doc, printer)
 
 
 def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     try:
         payload = json.loads(msg.payload)
-    except json.decoder.JSONDecodeError:
+    except json.decoder.JSONDecodeError as e:
+        print(f"JSON decode error {e}", flush=True)
         return
 
     subject = payload.get("subject")
@@ -147,6 +145,8 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
 
     formatted_time = time.strftime("%Y-%m-%dT%H:%M:%S")
     printer = userdata.printer
+
+    print(f"New email from {sender}, subject: {subject}", flush=True)
 
     # Print header
     parse_html(printer, TEMPLATE.render(subject=subject, time=formatted_time, sender=sender))

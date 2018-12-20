@@ -86,18 +86,19 @@ if __name__ == "__main__":
     driver = webdriver.Firefox(fp, firefox_binary=binary)
     print("Got driver", flush=True)
 
-    client = mqtt.Client(userdata=driver)
-    client.on_connect = on_connect
-    client.message_callback_add("printer/shopping-list", on_message)
+    try:
+        client = mqtt.Client(userdata=driver)
+        client.on_connect = on_connect
+        client.message_callback_add("printer/shopping-list", on_message)
 
-    client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
+        client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
 
-    while True:
-        try:
-            client.loop()
-        except (KeyboardInterrupt, SystemExit):
-            print("Bye!")
-            break
-
-    driver.close()
-    display.stop()
+        while True:
+            try:
+                client.loop()
+            except (KeyboardInterrupt, SystemExit):
+                print("Bye!")
+                break
+    finally:
+        driver.quit()
+        display.stop()
