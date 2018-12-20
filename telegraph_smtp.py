@@ -32,7 +32,7 @@ class TelegraphHandler:
         print('End of message', flush=True)
 
         message = email.parser.BytesParser(policy=email.policy.default).parsebytes(envelope.content)
-        message_body = message.get_body()
+        message_body = message.get_body(preferencelist=('html', 'plain'))
         message_content = message_body.get_content()
 
         data = json.dumps({

@@ -15,7 +15,7 @@ from weasyprint import HTML, CSS
 PAGE_STYLE = """
 @page {
   width: 384px;
-  height: 384px;
+  height: 3840px;
   margin: 0;
 }
 body {
