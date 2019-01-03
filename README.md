@@ -2,15 +2,9 @@
 
 A python project that listens for SMTP connections and prints them to my thermal printer.
 
-Basic HTML formatting is supported:
-* \<b\>
-* \<u\>
-* \<i\>
-* \<h1\>
-* \<h2\>
-* \<h3\>
+HTML rendering is provided by Weasyprint.
 
-Images are also supported when served over HTTP or Base64 encoded. Attached images do not work (yet).
+Images are also supported when served over HTTP or Base64 encoded. Attached images also work with Cotent-Id headers.
 
-Send me a message on any platform if you wish to have the details.
+Send me a message on any platform if you wish to have the details to send stuff to my printer.
 
