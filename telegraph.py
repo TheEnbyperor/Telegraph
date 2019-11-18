@@ -11,7 +11,8 @@ import struct
 import cairocffi as cairo
 import jinja2
 from PIL import Image, ImageOps
-from weasyprint import HTML, CSS, default_url_fetcher
+import weasyprint
+from weasyprint import HTML, CSS
 
 PAGE_STYLE = """
 @page {
@@ -22,6 +23,10 @@ PAGE_STYLE = """
 body {
   margin: 0;
   font-size: 20px;
+}
+* {
+  max-width: 384px;
+  word-wrap: normal;
 }
 """
 TEMPLATE = jinja2.Template("""
@@ -62,7 +67,7 @@ def on_connect(client, userdata, flags, rc):
     Handles subscribing to topics when a connection to MQTT is established
     :return: None
     """
-    print("Connected with result code "+str(rc), flush=True)
+    print("Connected with result code " + str(rc), flush=True)
     client.subscribe("printer/print")
 
 
@@ -91,8 +96,8 @@ def write_image_surface(doc, printer, resolution=96):
         im.load()
         im = convert_image(im)
         print_image(im, printer)
-
     printer._raw(escpos.constants.ESC + b"2")
+
 
 def convert_image(img: Image) -> Image:
     img_original = img.convert('RGBA')
@@ -125,18 +130,20 @@ def print_image(im: Image.Image, printer: escpos.escpos.Escpos):
 
 
 def attachment_fetcher_factory(attachments):
-    def attachment_fetcher(url)
+    def attachment_fetcher(url):
         if url.startswith('cid:'):
             cid = url[4:]
             attachment = attachments[cid]
-            return dict(string=base64.b64decode(attachment["data"], mime_type=attachment["type"])
+            return dict(string=base64.b64decode(attachment["data"]), mime_type=attachment["type"])
         else:
-          return weasyprint.default_url_fetcher(url)
+            return weasyprint.default_url_fetcher(url)
+
     return attachment_fetcher
 
 
 def parse_html(printer: escpos.escpos.Escpos, html: str, attachments: dict):
-    doc = HTML(string=html, url_fetcher=attachment_fetcher_factory(attachments)).render(stylesheets=[CSS(string=PAGE_STYLE, url_fetcher=attachment_fetcher_factory(attachments))], enable_hinting=True)
+    doc = HTML(string=html, url_fetcher=attachment_fetcher_factory(attachments)).render(
+        stylesheets=[CSS(string=PAGE_STYLE, url_fetcher=attachment_fetcher_factory(attachments))], enable_hinting=True)
     write_image_surface(doc, printer)
 
 
@@ -149,7 +156,7 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
 
     subject = payload.get("subject")
     if subject is None:
-        subject =  "None"
+        subject = "None"
     message = payload.get("message")
     if message is None:
         return
@@ -162,18 +169,20 @@ def on_message(client, userdata: Context, msg: mqtt.MQTTMessage):
     printer = userdata.printer
 
     print(f"New email from {sender}, subject: {subject}", flush=True)
+    print(message, flush=True)
 
     # Print header
     parse_html(printer, TEMPLATE.render(subject=subject, time=formatted_time, sender=sender), {})
 
     # Print message
     parse_html(printer, message, attachments)
-    printer._raw(b"\n"*6)
+    printer._raw(b"\n" * 3)
+    print("Done!", flush=True)
 
 
 if __name__ == "__main__":
     printer = escpos.printer.Usb(0x0416, 0x5011)
-    # printer = escpos.printer.Dummy()
+    #printer = escpos.printer.Dummy()
     printer._raw(escpos.constants.ESC + b"@")
 
     context = Context(printer)
@@ -182,7 +191,7 @@ if __name__ == "__main__":
     client.on_connect = on_connect
     client.message_callback_add("printer/print", on_message)
 
-    client.connect(os.getenv("MQTT_SERVER", "172.30.2.3"), 1883, 60)
+    client.connect(os.getenv("MQTT_SERVER", "172.30.2.10"), 1883, 60)
 
     while True:
         try:

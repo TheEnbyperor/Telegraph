@@ -210,3 +210,7 @@ pip-selfcheck.json
 
 
 # End of https://www.gitignore.io/api/python,pycharm
+
+masto_clientcred.secret
+masto_usercred.secret
+masto_last_notif_id

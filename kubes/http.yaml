@@ -33,6 +33,7 @@ metadata:
   labels:
     app: http
 spec:
+  type: LoadBalancer
   selector:
     app: http
   ports:
@@ -40,5 +41,4 @@ spec:
     targetPort: 80
     protocol: TCP
     name: http
-  externalIPs: ["172.30.2.4"]
 

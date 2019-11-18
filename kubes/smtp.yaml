@@ -38,6 +38,7 @@ metadata:
   labels:
     app: smtp
 spec:
+  type: LoadBalancer
   selector:
     app: smtp
   ports:
@@ -45,5 +46,4 @@ spec:
     targetPort: 25
     protocol: TCP
     name: smtp
-  externalIPs: ["172.30.2.4"]
 
